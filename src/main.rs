@@ -9,6 +9,8 @@ mod input;
 mod output;
 mod render_program;
 mod progress_bar;
+mod render_info;
+mod grayscale_encoder;
 
 use std::io::BufWriter;
 use application::Application;

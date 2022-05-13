@@ -4,6 +4,7 @@ use sysinfo::SystemExt;
 use crate::mandelbrot_renderer::MandelbrotRenderer;
 use crate::input::Input;
 use crate::output::Output;
+use crate::grayscale_encoder::GrayscaleEncoder;
 use crate::render_program::RenderProgram;
 use crate::progress_bar::ProgressBar;
 
@@ -62,9 +63,15 @@ impl<W: Write> Application<W> {
         progress_bar.print_progress(0.0);
         render_program.set_progress_callback(move |done| progress_bar.print_progress(done));
 
-        let mut writer = self.create_grayscale_encoder().write_header().unwrap();
+        let mut writer = GrayscaleEncoder::new(&mut self.w, self.bounds).write_header().unwrap();
         let stream_writer = writer.stream_writer_with_size(buf_size).unwrap();
-        render_program.begin(stream_writer);
+        let render_info = render_program.begin(stream_writer);
+
+        self.output.write_line_flushed(&format!("\n{} bytes rendered in {} minutes {} seconds {} milliseconds",
+            render_info.bytes,
+            render_info.elapsed.as_secs() / 60,
+            render_info.elapsed.as_secs() % 60,
+            render_info.elapsed.as_millis() % 1000));
     }
 
     fn are_args_valid(&mut self) -> bool {
@@ -132,13 +139,5 @@ impl<W: Write> Application<W> {
         let available_memory = self.system.available_memory() as usize * Self::KILO;
         let (memory_to_use, image_size) = (available_memory - self.remaining_memory_in_bytes, self.bounds.0 * self.bounds.1);
         if memory_to_use / 3 > image_size { image_size } else { memory_to_use / 3 }
-    }
-
-    fn create_grayscale_encoder(&mut self) -> png::Encoder<&mut W> {
-        let mut encoder = png::Encoder::new(&mut self.w, self.bounds.0 as u32, self.bounds.1 as u32);
-        encoder.set_color(png::ColorType::Grayscale);
-        encoder.set_depth(png::BitDepth::Eight);
-
-        encoder
     }
 }

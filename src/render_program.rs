@@ -3,6 +3,7 @@ use std::io::Write;
 use std::sync::atomic::Ordering;
 
 use crate::mandelbrot_renderer::MandelbrotRenderer;
+use crate::render_info::RenderInfo;
 
 pub struct RenderProgram {
     renderer: MandelbrotRenderer,
@@ -25,24 +26,25 @@ impl RenderProgram {
         self.progress_callback = Box::new(progress_callback);
     }
 
-    pub fn begin<W: Write>(&mut self, mut writer: W) {
-        let mut buf_offset = 0;
+    pub fn begin<W: Write>(&mut self, mut writer: W) -> RenderInfo {
         let bytes_to_render = self.renderer.get_canvas_resolution();
+        let mut rendering_time = std::time::Duration::default();
 
+        let mut buf_offset = 0;
         while buf_offset < bytes_to_render {
             if bytes_to_render - buf_offset < self.buf.len() {
                 self.buf.resize(bytes_to_render - buf_offset, 0);
             }
 
+            let now = std::time::Instant::now();
+
             if self.threads_to_use == 1 {
-                // let now = std::time::Instant::now();
                 self.run_singlethreaded(buf_offset);
-                // rendering_time += now.elapsed();
             } else {
-                // let now = std::time::Instant::now();
                 self.run_multithreaded(buf_offset);
-                // rendering_time += now.elapsed();
             }
+
+            rendering_time += now.elapsed();
 
             writer.write_all(&self.buf).unwrap();
             buf_offset += self.buf.len();
@@ -56,6 +58,8 @@ impl RenderProgram {
                                                 rendering_time.as_secs() / 60,
                                                 rendering_time.as_secs() % 60,
                                                 rendering_time.as_millis() % 1000));*/
+
+        RenderInfo::new(rendering_time, bytes_to_render)
     }
 
     fn run_singlethreaded(&mut self, buf_offset: usize) {
@@ -68,9 +72,12 @@ impl RenderProgram {
     fn run_multithreaded(&mut self, buf_offset: usize) {
         let bytes_per_thread = self.buf.len() / self.threads_to_use + 1;
         let chunks = self.buf.chunks_mut(bytes_per_thread).collect::<Vec<&mut [u8]>>();
+        
         let canvas_resolution = self.renderer.get_canvas_resolution() as f64;
+        
         let bytes_done = Arc::new(std::sync::atomic::AtomicUsize::new(buf_offset));
         let progress_callback = Arc::new(Mutex::new(&mut self.progress_callback));
+        
         crossbeam::scope(|scope| {
             for (i, chunk) in chunks.into_iter().enumerate() {
                 let offset = buf_offset + i * bytes_per_thread;

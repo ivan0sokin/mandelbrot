@@ -1,20 +1,21 @@
-use std::io::Write;
+use std::io::{Read, Write};
+use std::sync::{Arc, Mutex};
 use sysinfo::SystemExt;
 
 use crate::mandelbrot_renderer::MandelbrotRenderer;
 use crate::input::Input;
 use crate::output::Output;
 use crate::grayscale_encoder::GrayscaleEncoder;
-use crate::render_program::RenderProgram;
+use crate::render_program::{RenderProgram};
 use crate::progress_bar::ProgressBar;
 
 type GenericResult<R> = Result<R, Box<dyn std::error::Error>>;
 
-pub struct Application<W: Write> {
+pub struct Application<I: Read, O: Write, W: Write> {
     args: Vec<String>,
-    input: Input<std::io::Stdin>,
-    output: Output<std::io::Stdout>,
-    w: W,
+    input: Input<I>,
+    output: Output<O>,
+    writer: W,
     system: sysinfo::System,
     bounds: (usize, usize),
     remaining_memory_in_bytes: usize,
@@ -22,18 +23,18 @@ pub struct Application<W: Write> {
     iteration_count: usize
 }
 
-impl<W: Write> Application<W> {
+impl<I: Read, O: Write + Send + Sync, W: Write> Application<I, O, W> {
     const DEFAULT_BOUNDS: (usize, usize) = (640, 480);
     const KILO: usize = 1024;
     const GIGA: usize = 1024 * 1024 * 1024;
     const DEFAULT_PROGRESS_BAR_LENGTH: usize = 30;
 
-    pub fn new(args: Vec<String>, w: W) -> Self {
+    pub fn new(args: Vec<String>, input: I, output: O, writer: W) -> Self {
         Self {
             args,
-            input: Input::new(std::io::stdin()),
-            output: Output::new(std::io::stdout()),
-            w,
+            input: Input::new(input),
+            output: Output::new(output),
+            writer,
             system: sysinfo::System::new_with_specifics(sysinfo::RefreshKind::new().with_memory()),
             bounds: (0, 0),
             remaining_memory_in_bytes: 0,
@@ -59,15 +60,20 @@ impl<W: Write> Application<W> {
         let renderer = MandelbrotRenderer::new(self.bounds, MandelbrotRenderer::DEFAULT_PLANE_BOUNDS, self.iteration_count);
         let mut render_program = RenderProgram::new(renderer, buf_size, self.threads_to_use);
 
-        let mut progress_bar = ProgressBar::new('=', Self::DEFAULT_PROGRESS_BAR_LENGTH, Output::new(std::io::stdout()));
-        progress_bar.print_progress(0.0);
-        render_program.set_progress_callback(move |done| progress_bar.print_progress(done));
+        let thread_safe_output = Arc::new(Mutex::new(&mut self.output));
+        let output_copy = Arc::clone(&thread_safe_output);
 
-        let mut writer = GrayscaleEncoder::new(&mut self.w, self.bounds).write_header().unwrap();
+        let mut progress_bar = ProgressBar::new('=', Self::DEFAULT_PROGRESS_BAR_LENGTH);
+        render_program.set_progress_callback(move |done| {
+            progress_bar.update(done);
+            thread_safe_output.lock().unwrap().write_text_flushed(&format!("{}", progress_bar));
+        });
+
+        let mut writer = GrayscaleEncoder::new(&mut self.writer, self.bounds).write_header().unwrap();
         let stream_writer = writer.stream_writer_with_size(buf_size).unwrap();
         let render_info = render_program.begin(stream_writer);
 
-        self.output.write_line_flushed(&format!("\n{} bytes rendered in {} minutes {} seconds {} milliseconds",
+        output_copy.lock().unwrap().write_line_flushed(&format!("\n{} bytes rendered in {} minutes {} seconds {} milliseconds",
             render_info.bytes,
             render_info.elapsed.as_secs() / 60,
             render_info.elapsed.as_secs() % 60,

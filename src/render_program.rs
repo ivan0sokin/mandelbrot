@@ -5,14 +5,14 @@ use std::sync::atomic::Ordering;
 use crate::mandelbrot_renderer::MandelbrotRenderer;
 use crate::render_info::RenderInfo;
 
-pub struct RenderProgram {
+pub struct RenderProgram<'a> {
     renderer: MandelbrotRenderer,
     buf: Vec<u8>,
     threads_to_use: usize,
-    progress_callback: Box<dyn FnMut(f64) + Send + Sync>
+    progress_callback: Box<dyn FnMut(f64) + Send + Sync + 'a>
 }
 
-impl RenderProgram {
+impl<'a> RenderProgram<'a> {
     pub fn new(renderer: MandelbrotRenderer, buf_size: usize, threads_to_use: usize) -> Self {
         Self {
             renderer,
@@ -22,13 +22,15 @@ impl RenderProgram {
         }
     }
 
-    pub fn set_progress_callback(&mut self, progress_callback: impl FnMut(f64) + Sync + Send + 'static) {
+    pub fn set_progress_callback(&mut self, progress_callback: impl FnMut(f64) + Send + Sync + 'a) {
         self.progress_callback = Box::new(progress_callback);
     }
 
     pub fn begin<W: Write>(&mut self, mut writer: W) -> RenderInfo {
         let bytes_to_render = self.renderer.get_canvas_resolution();
         let mut rendering_time = std::time::Duration::default();
+
+        (self.progress_callback)(0.0);
 
         let mut buf_offset = 0;
         while buf_offset < bytes_to_render {
@@ -51,13 +53,6 @@ impl RenderProgram {
         }
 
         writer.flush().unwrap();
-
-        /*writer.finish().expect("Failed to finish writing mandelbrot_8k_300.png");
-
-        self.output.write_line_flushed(&format!("Time taken by rendering: {} minutes {} seconds {} milliseconds",
-                                                rendering_time.as_secs() / 60,
-                                                rendering_time.as_secs() % 60,
-                                                rendering_time.as_millis() % 1000));*/
 
         RenderInfo::new(rendering_time, bytes_to_render)
     }

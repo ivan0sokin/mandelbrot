@@ -1,23 +1,28 @@
-use std::io::Write;
-use crate::output::Output;
+use std::fmt::{Display, Result, Formatter};
 
-pub struct ProgressBar<W: Write + Send + Sync> {
+pub struct ProgressBar {
     symbol: char,
     len: usize,
-    output: Output<W>
+    done: f64
 }
 
-impl<W: Write + Send + Sync> ProgressBar<W> {
-    pub fn new(symbol: char, len: usize, output: Output<W>) -> Self {
+impl ProgressBar {
+    pub fn new(symbol: char, len: usize) -> Self {
         Self {
             symbol,
             len,
-            output
+            done: 0.0
         }
     }
 
-    pub fn print_progress(&mut self, done: f64) {
-        let repeat_count = (done * self.len as f64) as usize;
-        self.output.write_text_flushed(&format!("\r[{0: <1$}] {2:.1}% rendered", String::from(self.symbol).repeat(repeat_count), self.len, done * 100.0));
+    pub fn update(&mut self, done: f64) {
+        self.done = done;
+    }
+}
+
+impl Display for ProgressBar {
+    fn fmt(&self, f: &mut Formatter<'_>) -> Result {
+        let repeat_count = (self.done * self.len as f64) as usize;
+        write!(f, "\r[{0: <1$}] {2:.1}% rendered", String::from(self.symbol).repeat(repeat_count), self.len, self.done * 100.0)
     }
 }

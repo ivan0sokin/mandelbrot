@@ -1,10 +1,10 @@
 use std::io::Write;
 
-pub struct Output<W: Write + Send + Sync> {
+pub struct Output<W: Write> {
     inner: W
 }
 
-impl<W: Write + Send + Sync> Output<W> {
+impl<W: Write> Output<W> {
     pub fn new(output: W) -> Self {
         Self {
             inner: output

@@ -11,6 +11,8 @@ mod render_program;
 mod progress_bar;
 mod render_info;
 mod grayscale_encoder;
+mod color;
+mod rgb_encoder;
 
 use std::io::{BufReader, BufWriter};
 use application::Application;

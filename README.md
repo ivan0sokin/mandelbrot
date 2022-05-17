@@ -33,6 +33,10 @@ mandelbrot 640 480 1 1 100
 
 ## Renders
 
+### 8000x6000, 1000 iterations, color
+
+[![8000x6000, 1000 iterations](resources/mb_color.png)](resources/mb_color.png)
+
 ### 8k resolution, 300 iterations
 
 [![8k, 100 iterations](resources/mb_8k_300.png)](resources/mb_8k_300.png)

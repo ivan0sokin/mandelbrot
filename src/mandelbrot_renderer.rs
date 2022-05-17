@@ -1,6 +1,7 @@
 use crate::complex::Complex;
+use crate::color::{Gray, RGB};
 
-type FloatType = f64;
+pub type FloatType = f64;
 
 #[derive(Clone)]
 pub struct MandelbrotRenderer {
@@ -10,7 +11,8 @@ pub struct MandelbrotRenderer {
 }
 
 impl MandelbrotRenderer {
-    pub const DEFAULT_PLANE_BOUNDS: (Complex<FloatType>, Complex<FloatType>) = (Complex{ re: -3.0, im: 1.0}, Complex{ re: 1.0, im: -1.0});
+    pub const DEFAULT_PLANE_BOUNDS: (Complex<FloatType>, Complex<FloatType>) = (Complex{re: -3.0, im: 1.0}, Complex{re: 1.0, im: -1.0});
+    pub const WIKI_PLANE_BOUNDS: (Complex<FloatType>, Complex<FloatType>) = (Complex{re: -2.23845, im: 1.2}, Complex{re: 0.83845, im: -1.2});
     const MAX_SQUARED_MAGNITUDE: FloatType = 4.0;
 
     pub fn new(canvas_bounds: (usize, usize), plane_bounds: (Complex<FloatType>, Complex<FloatType>), iteration_count: usize) -> Self {
@@ -21,15 +23,13 @@ impl MandelbrotRenderer {
         }
     }
 
-    pub fn render(&self, buf: &mut [u8], offset: usize) {
-        for i in 0..buf.len() {
-            let j = offset + i;
-            let pixel = (j % self.canvas_bounds.0, self.canvas_bounds.1 - j / self.canvas_bounds.0);
-            if let Some(c) = self.escape_time(&self.map_pixel_to_complex_plane(&pixel)) {
-                buf[i] = 255u8 - (c as f64 / self.iteration_count as f64 * (255.0 - f64::EPSILON)) as u8;
-            } else {
-                buf[i] = 0;
-            }
+    pub fn render(&self, buf: &mut [u8], offset: usize, get_color: impl Fn(&Complex<FloatType>, Option<usize>) -> RGB<FloatType>) {
+        for i in 0..buf.len() / 3 {
+            let j = offset / 3 + i;
+            let pixel = (j % self.canvas_bounds.0, self.canvas_bounds.1 - j / self.canvas_bounds.0 - 1);
+            let z = self.map_pixel_to_complex_plane(&pixel);
+            let color = get_color(&z, self.escape_time(&z));
+            buf[3 * i..3 * i + 3].copy_from_slice(&color.to_bytes());
         }
     }
 
